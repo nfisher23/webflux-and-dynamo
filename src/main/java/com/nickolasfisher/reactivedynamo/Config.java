@@ -2,16 +2,13 @@ package com.nickolasfisher.reactivedynamo;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.reactive.function.server.RouterFunction;
-import org.springframework.web.reactive.function.server.ServerResponse;
-import org.springframework.web.server.ServerWebExchange;
-import org.springframework.web.server.WebExceptionHandler;
-import reactor.core.publisher.Mono;
+import org.springframework.web.reactive.function.server.*;
 import software.amazon.awssdk.auth.credentials.*;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
-
 import java.net.URI;
+
+import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
 @Configuration
 public class Config {
@@ -27,16 +24,8 @@ public class Config {
     }
 
     @Bean
-    public WebExceptionHandler wat() {
-        return new WebExceptionHandler() {
-            @Override
-            public Mono<Void> handle(ServerWebExchange serverWebExchange, Throwable throwable) {
-                return null;
-            }
-        };
+    public RouterFunction<ServerResponse> getPhoneRoutes(PhoneHandler phoneHandler) {
+        return route(RequestPredicates.PUT("/phone"), phoneHandler::createPhoneHandler)
+                .andRoute(RequestPredicates.GET("/company/{company-name}/model/{model-name}/phone"), phoneHandler::getSinglePhonxeHandler);
     }
-//    @Bean
-//    public RouterFunction<ServerResponse> getPhoneRoute() {
-//        return GET("/")
-//    }
 }

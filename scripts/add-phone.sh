@@ -1,7 +1,7 @@
 PHONE_TEMPLATE=$(cat <<'EOF'
 {
     "company": "Nokia",
-    "model": "1999 dumb phone",
+    "model": "1998 dumb phone",
     "colors": [
         "Red",
         "Silver"
