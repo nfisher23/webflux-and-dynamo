@@ -21,6 +21,8 @@ public class PhoneHandler {
     public static final String PHONES_TABLENAME = "Phones";
     public static final String COMPANY = "Company";
     public static final String MODEL = "Model";
+    public static final String COLORS = "Colors";
+    public static final String SIZE = "Size";
 
     private final DynamoDbAsyncClient dynamoDbAsyncClient;
 
@@ -33,9 +35,9 @@ public class PhoneHandler {
             Map<String, AttributeValue> item = new HashMap<>();
             item.put(COMPANY, AttributeValue.builder().s(phone.getCompany()).build());
             item.put(MODEL, AttributeValue.builder().s(phone.getModel()).build());
-            item.put("Colors", AttributeValue.builder().ss(phone.getColors()).build());
+            item.put(COLORS, AttributeValue.builder().ss(phone.getColors()).build());
             if (phone.getSize() != null) {
-                item.put("Size", AttributeValue.builder().n(phone.getSize().toString()).build());
+                item.put(SIZE, AttributeValue.builder().n(phone.getSize().toString()).build());
             }
 
             PutItemRequest putItemRequest = PutItemRequest.builder().tableName(PHONES_TABLENAME).item(item).build();
@@ -64,7 +66,11 @@ public class PhoneHandler {
                         return ServerResponse.notFound().build();
                     }
                     Phone phone = new Phone();
-                    phone.setColors(getItemResponse.item().get("Colors").ss());
+                    phone.setColors(getItemResponse.item().get(COLORS).ss());
+                    phone.setCompany(getItemResponse.item().get(COMPANY).s());
+                    String stringSize = getItemResponse.item().get(SIZE).n();
+                    phone.setSize(stringSize == null ? null : Integer.valueOf(stringSize));
+                    phone.setModel(getItemResponse.item().get(MODEL).s());
                     return ServerResponse.ok()
                             .contentType(MediaType.APPLICATION_JSON)
                             .body(BodyInserters.fromValue(phone));

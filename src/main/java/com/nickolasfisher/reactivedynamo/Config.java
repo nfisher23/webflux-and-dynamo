@@ -26,6 +26,6 @@ public class Config {
     @Bean
     public RouterFunction<ServerResponse> getPhoneRoutes(PhoneHandler phoneHandler) {
         return route(RequestPredicates.PUT("/phone"), phoneHandler::createPhoneHandler)
-                .andRoute(RequestPredicates.GET("/company/{company-name}/model/{model-name}/phone"), phoneHandler::getSinglePhonxeHandler);
+                .andRoute(RequestPredicates.GET("/company/{company-name}/model/{model-name}/phone"), phoneHandler::getSinglePhoneHandler);
     }
 }
