@@ -36,6 +36,8 @@ public class PhoneServiceTest {
     private static DynamoDbAsyncClient dynamoDbAsyncClient;
 
     private static int port;
+    public static final String COLOR = "Color";
+    public static final String YEAR = "Year";
 
     private static int getFreePort() {
         try {
@@ -73,7 +75,7 @@ public class PhoneServiceTest {
             throw new RuntimeException();
         }
     }
-    
+
     @Test
     public void testStuff() throws Exception {
         ListTablesResponse listTablesResponse = dynamoDbAsyncClient.listTables().get();
@@ -171,7 +173,7 @@ public class PhoneServiceTest {
                         .tableName(currentTableName)
                         .key(getMapWith(stubCompanyName, stubPhoneName))
                         .build())
-                ))
+        ))
                 // not blue, so our conditional expression prevented us from overwriting it
                 .expectNextMatches(getItemResponse -> "Orange".equals(getItemResponse.item().get("Color").s()))
                 .verifyComplete();
@@ -186,9 +188,6 @@ public class PhoneServiceTest {
         String rangeKey1 = "Pixel 1";
         String rangeKey2 = "Future Phone";
         String rangeKey3 = "Pixel 2";
-
-        String COLOR = "Color";
-        String YEAR = "Year";
 
         // create three items
         Map<String, AttributeValue> pixel1ItemAttributes = getMapWith(partitionKey, rangeKey1);
@@ -210,9 +209,9 @@ public class PhoneServiceTest {
         Condition equalsGoogleCondition = Condition.builder()
                 .comparisonOperator(ComparisonOperator.EQ)
                 .attributeValueList(
-                    AttributeValue.builder()
-                        .s(partitionKey)
-                        .build()
+                        AttributeValue.builder()
+                                .s(partitionKey)
+                                .build()
                 )
                 .build();
 
@@ -224,10 +223,10 @@ public class PhoneServiceTest {
         StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.query(hashKeyIsGoogleQuery)))
                 .expectNextMatches(queryResponse -> queryResponse.count() == 3
                         && queryResponse.items()
-                            .stream()
-                            .anyMatch(attributeValueMap -> "2012".equals(
+                        .stream()
+                        .anyMatch(attributeValueMap -> "2012".equals(
                                 attributeValueMap.get(YEAR).n())
-                            )
+                        )
                 )
                 .verifyComplete();
 
@@ -252,6 +251,87 @@ public class PhoneServiceTest {
         StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.query(equalsGoogleAndStartsWithPixelQuery)))
                 .expectNextMatches(queryResponse -> queryResponse.count() == 2)
                 .verifyComplete();
+    }
+
+    @Test
+    public void testTTL() throws Exception {
+        String currentTableName = "PhoneTTLTest";
+        createTableAndWaitForComplete(currentTableName);
+
+        String EXPIRE_TIME = "ExpireTime";
+        dynamoDbAsyncClient.updateTimeToLive(
+            UpdateTimeToLiveRequest.builder()
+                .tableName(currentTableName)
+                .timeToLiveSpecification(
+                        TimeToLiveSpecification.builder()
+                                .enabled(true)
+                                .attributeName(EXPIRE_TIME)
+                                .build()
+                )
+                .build()
+        ).get();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.describeTimeToLive(
+                DescribeTimeToLiveRequest.builder().tableName(currentTableName).build()))
+            )
+            .expectNextMatches(describeTimeToLiveResponse ->
+                describeTimeToLiveResponse
+                    .timeToLiveDescription()
+                    .timeToLiveStatus().equals(TimeToLiveStatus.ENABLED)
+            )
+            .verifyComplete();
+
+        String partitionKey = "Google";
+        String rangeKey = "Pixel 1";
+
+        Map<String, AttributeValue> pixel1ItemAttributes = getMapWith(partitionKey, rangeKey);
+        pixel1ItemAttributes.put(COLOR, AttributeValue.builder().s("Blue").build());
+        pixel1ItemAttributes.put(YEAR, AttributeValue.builder().n("2012").build());
+
+        // expire about 3 seconds from now
+        String expireTime = Long.toString((System.currentTimeMillis() / 1000L) + 3);
+        pixel1ItemAttributes.put(
+                EXPIRE_TIME,
+                AttributeValue.builder()
+                        .n(expireTime)
+                        .build()
+        );
+
+        PutItemRequest populateDataItemRequest = PutItemRequest.builder()
+                .tableName(currentTableName)
+                .item(pixel1ItemAttributes)
+                .build();
+
+        // put item with TTL into dynamo
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.putItem(populateDataItemRequest)))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        Map<String, AttributeValue> currentItemKey = Map.of(
+                COMPANY, AttributeValue.builder().s(partitionKey).build(),
+                MODEL, AttributeValue.builder().s(rangeKey).build()
+        );
+
+        // get immediately, should exist
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.getItem(
+                GetItemRequest.builder().tableName(currentTableName).key(currentItemKey).build()))
+            )
+            .expectNextMatches(getItemResponse -> getItemResponse.hasItem()
+                    && getItemResponse.item().get(COLOR).s().equals("Blue"))
+            .verifyComplete();
+
+        // local dynamo seems to need like 10 seconds to actually clear this out
+        Thread.sleep(13000);
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.getItem(
+                GetItemRequest.builder()
+                        .key(currentItemKey)
+                        .tableName(currentTableName)
+                        .build())
+                )
+            )
+            .expectNextMatches(getItemResponse -> !getItemResponse.hasItem())
+            .verifyComplete();
     }
 
     private void putItem(String tableName, Map<String, AttributeValue> attributes) {
