@@ -9,3 +9,5 @@ Can be found here:
 - [Configuring an In Memory DynamoDB instance with Java for Integration Testing](https://nickolasfisher.com/blog/Configuring-an-In-Memory-DynamoDB-instance-with-Java-for-Integration-Testing)
 - [Optimistic Locking in Java and DynamoDB](https://nickolasfisher.com/blog/Optimistic-Locking-in-Java-and-DynamoDB)
 - [Querying DynamoDB in Java with the AWS SDK 2.0](https://nickolasfisher.com/blog/Querying-DynamoDB-in-Java-with-the-AWS-SDK-20)
+- [Set Time to Live \[TTL\] on DynamoDB Items using Java](https://nickolasfisher.com/blog/Set-Time-to-Live-TTL-on-DynamoDB-Items-using-Java)
+
