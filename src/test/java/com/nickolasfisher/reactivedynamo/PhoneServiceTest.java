@@ -21,6 +21,7 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -98,12 +99,24 @@ public class PhoneServiceTest {
     private CompletableFuture<CreateTableResponse> createTableAsync(String tableName) {
         return dynamoDbAsyncClient.createTable(CreateTableRequest.builder()
                 .keySchema(
-                        KeySchemaElement.builder().keyType(KeyType.HASH).attributeName(COMPANY).build(),
-                        KeySchemaElement.builder().keyType(KeyType.RANGE).attributeName(MODEL).build()
+                        KeySchemaElement.builder()
+                                .keyType(KeyType.HASH)
+                                .attributeName(COMPANY)
+                                .build(),
+                        KeySchemaElement.builder()
+                                .keyType(KeyType.RANGE)
+                                .attributeName(MODEL)
+                                .build()
                 )
                 .attributeDefinitions(
-                        AttributeDefinition.builder().attributeName(COMPANY).attributeType(ScalarAttributeType.S).build(),
-                        AttributeDefinition.builder().attributeName(MODEL).attributeType(ScalarAttributeType.S).build()
+                        AttributeDefinition.builder()
+                                .attributeName(COMPANY)
+                                .attributeType(ScalarAttributeType.S)
+                                .build(),
+                        AttributeDefinition.builder()
+                                .attributeName(MODEL)
+                                .attributeType(ScalarAttributeType.S)
+                                .build()
                 )
                 .provisionedThroughput(ProvisionedThroughput.builder().readCapacityUnits(100L).writeCapacityUnits(100L).build())
                 .tableName(tableName)
@@ -140,7 +153,7 @@ public class PhoneServiceTest {
         itemAttributesOptLocking.put("Version", AttributeValue.builder().n(Long.valueOf(1L).toString()).build());
 
         Map<String, AttributeValue> expressionAttributeValues = new HashMap<>();
-        expressionAttributeValues.put(":version", AttributeValue.builder().n("1").build());
+        expressionAttributeValues.put(":version", AttributeValue.builder().n("0").build());
 
         PutItemRequest conditionalPutItem = PutItemRequest.builder()
                 .item(itemAttributes)
@@ -161,6 +174,95 @@ public class PhoneServiceTest {
                 ))
                 // not blue, so our conditional expression prevented us from overwriting it
                 .expectNextMatches(getItemResponse -> "Orange".equals(getItemResponse.item().get("Color").s()))
+                .verifyComplete();
+    }
+
+    @Test
+    public void testQueries() throws Exception {
+        String currentTableName = "PhonesQueriesTest";
+        createTableAndWaitForComplete(currentTableName);
+
+        String partitionKey = "Google";
+        String rangeKey1 = "Pixel 1";
+        String rangeKey2 = "Future Phone";
+        String rangeKey3 = "Pixel 2";
+
+        String COLOR = "Color";
+        String YEAR = "Year";
+
+        // create three items
+        Map<String, AttributeValue> pixel1ItemAttributes = getMapWith(partitionKey, rangeKey1);
+        pixel1ItemAttributes.put(COLOR, AttributeValue.builder().s("Blue").build());
+        pixel1ItemAttributes.put(YEAR, AttributeValue.builder().n("2012").build());
+        putItem(currentTableName, pixel1ItemAttributes);
+
+        Map<String, AttributeValue> futurePhoneAttributes = getMapWith(partitionKey, rangeKey2);
+        futurePhoneAttributes.put(COLOR, AttributeValue.builder().s("Silver").build());
+        futurePhoneAttributes.put(YEAR, AttributeValue.builder().n("2030").build());
+        putItem(currentTableName, futurePhoneAttributes);
+
+        Map<String, AttributeValue> pixel2ItemAttributes = getMapWith(partitionKey, rangeKey3);
+        pixel2ItemAttributes.put(COLOR, AttributeValue.builder().s("Cyan").build());
+        pixel2ItemAttributes.put(YEAR, AttributeValue.builder().n("2014").build());
+        putItem(currentTableName, pixel2ItemAttributes);
+
+        // get all items associated with the "Google" partition key
+        Condition equalsGoogleCondition = Condition.builder()
+                .comparisonOperator(ComparisonOperator.EQ)
+                .attributeValueList(
+                    AttributeValue.builder()
+                        .s(partitionKey)
+                        .build()
+                )
+                .build();
+
+        QueryRequest hashKeyIsGoogleQuery = QueryRequest.builder()
+                .tableName(currentTableName)
+                .keyConditions(Map.of(COMPANY, equalsGoogleCondition))
+                .build();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.query(hashKeyIsGoogleQuery)))
+                .expectNextMatches(queryResponse -> queryResponse.count() == 3
+                        && queryResponse.items()
+                            .stream()
+                            .anyMatch(attributeValueMap -> "2012".equals(
+                                attributeValueMap.get(YEAR).n())
+                            )
+                )
+                .verifyComplete();
+
+        // Get all items that start with "Pixel"
+        Condition startsWithPixelCondition = Condition.builder()
+                .comparisonOperator(ComparisonOperator.BEGINS_WITH)
+                .attributeValueList(
+                        AttributeValue.builder()
+                                .s("Pixel")
+                                .build()
+                )
+                .build();
+
+        QueryRequest equalsGoogleAndStartsWithPixelQuery = QueryRequest.builder()
+                .tableName(currentTableName)
+                .keyConditions(Map.of(
+                        COMPANY, equalsGoogleCondition,
+                        MODEL, startsWithPixelCondition
+                ))
+                .build();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.query(equalsGoogleAndStartsWithPixelQuery)))
+                .expectNextMatches(queryResponse -> queryResponse.count() == 2)
+                .verifyComplete();
+    }
+
+    private void putItem(String tableName, Map<String, AttributeValue> attributes) {
+        PutItemRequest populateDataItemRequest = PutItemRequest.builder()
+                .tableName(tableName)
+                .item(attributes)
+                .build();
+
+        // populate initial data
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.putItem(populateDataItemRequest)))
+                .expectNextCount(1)
                 .verifyComplete();
     }
 
