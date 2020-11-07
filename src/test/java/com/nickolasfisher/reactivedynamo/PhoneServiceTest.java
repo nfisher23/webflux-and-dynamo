@@ -334,6 +334,124 @@ public class PhoneServiceTest {
             .verifyComplete();
     }
 
+    @Test
+    public void localSecondaryIndex() throws Exception {
+        String currentTableName = "LocalIndexTest";
+        String COMPANY_YEAR_INDEX = "CompanyYearIndex";
+        LocalSecondaryIndex localSecondaryIndexSpec = LocalSecondaryIndex.builder()
+                .keySchema(
+                        KeySchemaElement.builder()
+                                .keyType(KeyType.HASH)
+                                .attributeName(COMPANY)
+                                .build(),
+                        KeySchemaElement.builder()
+                                .keyType(KeyType.RANGE)
+                                .attributeName(YEAR)
+                                .build()
+                )
+                .indexName(COMPANY_YEAR_INDEX)
+                .projection(Projection.builder()
+                        .projectionType(ProjectionType.ALL)
+                        .build()
+                )
+                .build();
+
+        dynamoDbAsyncClient.createTable(CreateTableRequest.builder()
+                .keySchema(
+                        KeySchemaElement.builder()
+                                .keyType(KeyType.HASH)
+                                .attributeName(COMPANY)
+                                .build(),
+                        KeySchemaElement.builder()
+                                .keyType(KeyType.RANGE)
+                                .attributeName(MODEL)
+                                .build()
+                )
+                .attributeDefinitions(
+                        AttributeDefinition.builder()
+                                .attributeName(COMPANY)
+                                .attributeType(ScalarAttributeType.S)
+                                .build(),
+                        AttributeDefinition.builder()
+                                .attributeName(MODEL)
+                                .attributeType(ScalarAttributeType.S)
+                                .build(),
+                        AttributeDefinition.builder()
+                                .attributeName(YEAR)
+                                .attributeType(ScalarAttributeType.N)
+                                .build()
+                )
+                .provisionedThroughput(ProvisionedThroughput.builder()
+                        .readCapacityUnits(100L)
+                        .writeCapacityUnits(100L).build()
+                )
+                .tableName(currentTableName)
+                .localSecondaryIndexes(localSecondaryIndexSpec)
+                .build()
+        ).get();
+
+        String partitionKey = "Google";
+        String rangeKey1 = "Pixel 1";
+        String rangeKey2 = "Future Phone";
+        String rangeKey3 = "Pixel 2";
+
+        // create three items
+        Map<String, AttributeValue> pixel1ItemAttributes = getMapWith(partitionKey, rangeKey1);
+        pixel1ItemAttributes.put(COLOR, AttributeValue.builder().s("Blue").build());
+        pixel1ItemAttributes.put(YEAR, AttributeValue.builder().n("2012").build());
+        putItem(currentTableName, pixel1ItemAttributes);
+
+        Map<String, AttributeValue> futurePhoneAttributes = getMapWith(partitionKey, rangeKey2);
+        futurePhoneAttributes.put(COLOR, AttributeValue.builder().s("Silver").build());
+        futurePhoneAttributes.put(YEAR, AttributeValue.builder().n("2030").build());
+        putItem(currentTableName, futurePhoneAttributes);
+
+        Map<String, AttributeValue> pixel2ItemAttributes = getMapWith(partitionKey, rangeKey3);
+        pixel2ItemAttributes.put(COLOR, AttributeValue.builder().s("Cyan").build());
+        pixel2ItemAttributes.put(YEAR, AttributeValue.builder().n("2014").build());
+        putItem(currentTableName, pixel2ItemAttributes);
+
+        Condition equalsGoogleCondition = Condition.builder()
+                .comparisonOperator(ComparisonOperator.EQ)
+                .attributeValueList(
+                    AttributeValue.builder()
+                            .s(partitionKey)
+                            .build()
+                )
+                .build();
+
+        Condition greaterThan2013Condition = Condition.builder()
+                .comparisonOperator(ComparisonOperator.GT)
+                .attributeValueList(
+                    AttributeValue.builder()
+                        .n("2013")
+                        .build()
+                )
+                .build();
+
+        QueryRequest yearAfter2013Query = QueryRequest.builder()
+                .tableName(currentTableName)
+                .keyConditions(
+                    Map.of(
+                        COMPANY, equalsGoogleCondition,
+                        YEAR, greaterThan2013Condition
+                    )
+                )
+                .indexName(COMPANY_YEAR_INDEX)
+                .build();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.query(yearAfter2013Query)))
+                .expectNextMatches(queryResponse ->
+                        queryResponse.count() == 2
+                        && queryResponse.items()
+                            .stream()
+                            .anyMatch(attributeValueMap -> "Pixel 2".equals(
+                                    attributeValueMap.get(MODEL).s())
+                            )
+                )
+                .verifyComplete();
+    }
+
     private void putItem(String tableName, Map<String, AttributeValue> attributes) {
         PutItemRequest populateDataItemRequest = PutItemRequest.builder()
                 .tableName(tableName)
