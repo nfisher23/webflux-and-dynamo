@@ -10,4 +10,4 @@ Can be found here:
 - [Optimistic Locking in Java and DynamoDB](https://nickolasfisher.com/blog/Optimistic-Locking-in-Java-and-DynamoDB)
 - [Querying DynamoDB in Java with the AWS SDK 2.0](https://nickolasfisher.com/blog/Querying-DynamoDB-in-Java-with-the-AWS-SDK-20)
 - [Set Time to Live \[TTL\] on DynamoDB Items using Java](https://nickolasfisher.com/blog/Set-Time-to-Live-TTL-on-DynamoDB-Items-using-Java)
-
+- [Query a DynamoDB Local Secondary Index with Java](https://nickolasfisher.com/blog/Query-a-DynamoDB-Local-Secondary-Index-with-Java)
