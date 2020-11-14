@@ -666,6 +666,56 @@ public class PhoneServiceTest {
                 .verifyComplete();
     }
 
+    @Test
+    public void scanning() throws Exception {
+        String currentTableName = "ScanTest";
+        createTableAndWaitForComplete(currentTableName);
+
+        String partitionKey = "Google";
+        String rangeKey1 = "Pixel 1";
+        String rangeKey2 = "Future Phone";
+        String rangeKey3 = "Pixel 2";
+
+        // create three items
+        Map<String, AttributeValue> pixel1ItemAttributes = getMapWith(partitionKey, rangeKey1);
+        pixel1ItemAttributes.put(COLOR, AttributeValue.builder().s("Blue").build());
+        pixel1ItemAttributes.put(YEAR, AttributeValue.builder().n("2012").build());
+        putItem(currentTableName, pixel1ItemAttributes);
+
+        Map<String, AttributeValue> futurePhoneAttributes = getMapWith(partitionKey, rangeKey2);
+        futurePhoneAttributes.put(COLOR, AttributeValue.builder().s("Silver").build());
+        futurePhoneAttributes.put(YEAR, AttributeValue.builder().n("2030").build());
+        putItem(currentTableName, futurePhoneAttributes);
+
+        Map<String, AttributeValue> pixel2ItemAttributes = getMapWith(partitionKey, rangeKey3);
+        pixel2ItemAttributes.put(COLOR, AttributeValue.builder().s("Cyan").build());
+        pixel2ItemAttributes.put(YEAR, AttributeValue.builder().n("2014").build());
+        putItem(currentTableName, pixel2ItemAttributes);
+
+        // scan everything, return everything
+        ScanRequest scanEverythingRequest = ScanRequest.builder().tableName(currentTableName).build();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.scan(scanEverythingRequest)))
+                .expectNextMatches(scanResponse -> scanResponse.scannedCount() == 3
+                        && scanResponse.items().size() == 3
+                )
+                .verifyComplete();
+
+        // scan everything, return just items with Color == "Cyan"
+        ScanRequest scanForCyanRequest = ScanRequest.builder()
+                .tableName(currentTableName)
+                .filterExpression("Color = :color")
+                .expressionAttributeValues(Map.of(":color", AttributeValue.builder().s("Cyan").build()))
+                .build();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.scan(scanForCyanRequest)))
+                .expectNextMatches(scanResponse -> scanResponse.scannedCount() == 3
+                        && scanResponse.items().size() == 1
+                        && scanResponse.items().get(0).get("Year").n().equals("2014")
+                )
+                .verifyComplete();
+    }
+
     private void putItem(String tableName, Map<String, AttributeValue> attributes) {
         PutItemRequest populateDataItemRequest = PutItemRequest.builder()
                 .tableName(tableName)
