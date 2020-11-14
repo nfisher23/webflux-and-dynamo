@@ -12,3 +12,5 @@ Can be found here:
 - [Set Time to Live \[TTL\] on DynamoDB Items using Java](https://nickolasfisher.com/blog/Set-Time-to-Live-TTL-on-DynamoDB-Items-using-Java)
 - [Query a DynamoDB Local Secondary Index with Java](https://nickolasfisher.com/blog/Query-a-DynamoDB-Local-Secondary-Index-with-Java)
 - [Query a DynamoDB Global Secondary Index in Java](https://nickolasfisher.com/blog/Query-a-DynamoDB-Global-Secondary-Index-in-Java)
+- [DynamoDB and Duplicate Keys in Global Secondary Indexes](https://nickolasfisher.com/blog/DynamoDB-and-Duplicate-Keys-in-Global-Secondary-Indexes)
+
