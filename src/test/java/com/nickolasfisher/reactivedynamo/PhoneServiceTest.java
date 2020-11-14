@@ -559,7 +559,111 @@ public class PhoneServiceTest {
                         && queryResponse.items().get(0).get(MODEL).s().equals("Pixel 1")
                 )
                 .verifyComplete();
+    }
 
+    @Test
+    public void gsiDuplicateKeysExample() throws Exception {
+        String currentTableName = "DuplicateKeysTest";
+        String YEAR_GSI_NAME = "YearIndex";
+
+        ProvisionedThroughput defaultProvisionedThroughput = ProvisionedThroughput.builder()
+                .readCapacityUnits(100L)
+                .writeCapacityUnits(100L)
+                .build();
+
+        dynamoDbAsyncClient.createTable(CreateTableRequest.builder()
+                .keySchema(
+                    KeySchemaElement.builder()
+                            .keyType(KeyType.HASH)
+                            .attributeName(COMPANY)
+                            .build(),
+                    KeySchemaElement.builder()
+                            .keyType(KeyType.RANGE)
+                            .attributeName(MODEL)
+                            .build()
+                )
+                .attributeDefinitions(
+                    AttributeDefinition.builder()
+                            .attributeName(COMPANY)
+                            .attributeType(ScalarAttributeType.S)
+                            .build(),
+                    AttributeDefinition.builder()
+                            .attributeName(MODEL)
+                            .attributeType(ScalarAttributeType.S)
+                            .build(),
+                    AttributeDefinition.builder()
+                            .attributeName(YEAR)
+                            .attributeType(ScalarAttributeType.N)
+                            .build()
+                )
+                .provisionedThroughput(defaultProvisionedThroughput)
+                .tableName(currentTableName)
+                .globalSecondaryIndexes(GlobalSecondaryIndex.builder()
+                    .indexName(YEAR_GSI_NAME)
+                    .keySchema(
+                        KeySchemaElement.builder()
+                                .attributeName(YEAR)
+                                .keyType(KeyType.HASH)
+                                .build()
+                    ).projection(
+                        Projection.builder()
+                                .projectionType(ProjectionType.ALL)
+                                .build()
+                    )
+                    .provisionedThroughput(defaultProvisionedThroughput)
+                    .build()
+                ).build()
+        ).get();
+
+        String partitionKey = "Google";
+        String rangeKey1 = "Pixel 1";
+        String rangeKey2 = "Future Phone";
+        String rangeKey3 = "Pixel 2";
+
+        // create three items
+        Map<String, AttributeValue> pixel1ItemAttributes = getMapWith(partitionKey, rangeKey1);
+        pixel1ItemAttributes.put(COLOR, AttributeValue.builder().s("Blue").build());
+        pixel1ItemAttributes.put(YEAR, AttributeValue.builder().n("2012").build());
+        putItem(currentTableName, pixel1ItemAttributes);
+
+        Map<String, AttributeValue> futurePhoneAttributes = getMapWith(partitionKey, rangeKey2);
+        futurePhoneAttributes.put(COLOR, AttributeValue.builder().s("Silver").build());
+        futurePhoneAttributes.put(YEAR, AttributeValue.builder().n("2012").build());
+        putItem(currentTableName, futurePhoneAttributes);
+
+        Map<String, AttributeValue> pixel2ItemAttributes = getMapWith(partitionKey, rangeKey3);
+        pixel2ItemAttributes.put(COLOR, AttributeValue.builder().s("Cyan").build());
+        pixel2ItemAttributes.put(YEAR, AttributeValue.builder().n("2014").build());
+        putItem(currentTableName, pixel2ItemAttributes);
+
+        Thread.sleep(1000); // GSI's are eventually consistent
+
+        Condition equals2012Condition = Condition.builder()
+                .comparisonOperator(ComparisonOperator.EQ)
+                .attributeValueList(
+                    AttributeValue.builder()
+                            .n("2012")
+                            .build()
+                )
+                .build();
+
+        QueryRequest equals2012Query = QueryRequest.builder()
+                .tableName(currentTableName)
+                .keyConditions(
+                    Map.of(
+                        YEAR, equals2012Condition
+                    )
+                )
+                .indexName(YEAR_GSI_NAME)
+                .build();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.query(equals2012Query)))
+                .expectNextMatches(queryResponse ->
+                    queryResponse.count() == 2
+                        && queryResponse.items().stream().anyMatch(m -> m.get(COLOR).s().equals("Blue"))
+                        && queryResponse.items().stream().anyMatch(m -> m.get(COLOR).s().equals("Silver"))
+                )
+                .verifyComplete();
     }
 
     private void putItem(String tableName, Map<String, AttributeValue> attributes) {
