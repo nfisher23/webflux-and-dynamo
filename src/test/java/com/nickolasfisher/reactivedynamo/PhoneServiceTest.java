@@ -11,6 +11,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -714,6 +716,50 @@ public class PhoneServiceTest {
                         && scanResponse.items().get(0).get("Year").n().equals("2014")
                 )
                 .verifyComplete();
+    }
+
+    @Test
+    public void nestedAttributes() throws Exception {
+        String currentTableName = "NestedAttributesTest";
+        createTableAndWaitForComplete(currentTableName);
+
+        Map<String, AttributeValue> attributes = Map.of(
+                COMPANY, AttributeValue.builder().s("Motorola").build(),
+                MODEL, AttributeValue.builder().s("G1").build(),
+                "MetadataList", AttributeValue.builder().l(
+                        AttributeValue.builder().s("Super Cool").build(),
+                        AttributeValue.builder().n("100").build()).build(),
+                "MetadataStringSet", AttributeValue.builder().ss("one", "two", "three").build(),
+                "MetadataNumberSet", AttributeValue.builder()
+                        .bs(SdkBytes.fromByteArray(new byte[] {43, 123}), SdkBytes.fromByteArray(new byte[] {78, 100}))
+                        .build()
+            );
+
+        PutItemRequest populateDataItemRequest = PutItemRequest.builder()
+                .tableName(currentTableName)
+                .item(attributes)
+                .build();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.putItem(populateDataItemRequest)))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        GetItemRequest getItemRequest = GetItemRequest.builder()
+                .tableName(currentTableName)
+                .key(getMapWith("Motorola", "G1"))
+                .build();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.getItem(getItemRequest)))
+                .expectNextMatches(getItemResponse -> {
+                    List<AttributeValue> listOfMetadata = getItemResponse.item().get("MetadataList").l();
+                    List<String> stringSetMetadata = getItemResponse.item().get("MetadataStringSet").ss();
+
+                    return listOfMetadata.size() == 2
+                            && listOfMetadata.stream().anyMatch(attributeValue -> "Super Cool".equals(attributeValue.s()))
+                            && listOfMetadata.stream().anyMatch(attributeValue -> "100".equals(attributeValue.n()))
+                            && stringSetMetadata.contains("one")
+                            && stringSetMetadata.contains("two");
+                }).verifyComplete();
     }
 
     private void putItem(String tableName, Map<String, AttributeValue> attributes) {
