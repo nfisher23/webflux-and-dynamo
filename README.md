@@ -14,3 +14,4 @@ Can be found here:
 - [Query a DynamoDB Global Secondary Index in Java](https://nickolasfisher.com/blog/Query-a-DynamoDB-Global-Secondary-Index-in-Java)
 - [DynamoDB and Duplicate Keys in Global Secondary Indexes](https://nickolasfisher.com/blog/DynamoDB-and-Duplicate-Keys-in-Global-Secondary-Indexes)
 - [Scanning a DynamoDB table in Java with the AWS SDK 2.0](https://nickolasfisher.com/blog/Scanning-a-DynamoDB-table-in-Java-with-the-AWS-SDK-20)
+- [DynamoDB Transactions and Java](https://nickolasfisher.com/blog/DynamoDB-Transactions-and-Java)
