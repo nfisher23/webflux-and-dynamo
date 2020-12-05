@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
+import org.w3c.dom.Attr;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -760,6 +761,116 @@ public class PhoneServiceTest {
                             && stringSetMetadata.contains("one")
                             && stringSetMetadata.contains("two");
                 }).verifyComplete();
+    }
+
+    @Test
+     public void transactions() throws Exception {
+        String currentTableName = "TransactionsTest";
+        createTableAndWaitForComplete(currentTableName);
+
+        String partitionKey = "Google";
+        String rangeKey1 = "Pixel 1";
+        String rangeKey2 = "Future Phone";
+
+        // create three items
+        Map<String, AttributeValue> pixel1ItemAttributes = getMapWith(partitionKey, rangeKey1);
+        pixel1ItemAttributes.put(COLOR, s("Blue"));
+        pixel1ItemAttributes.put(YEAR, AttributeValue.builder().n("2012").build());
+        putItem(currentTableName, pixel1ItemAttributes);
+
+        Map<String, AttributeValue> futurePhoneAttributes = getMapWith(partitionKey, rangeKey2);
+        futurePhoneAttributes.put(COLOR, s("Silver"));
+        futurePhoneAttributes.put(YEAR, AttributeValue.builder().n("2030").build());
+        putItem(currentTableName, futurePhoneAttributes);
+
+        Map<String, AttributeValue> rangeKey1Map = Map.of(
+            COMPANY, s(partitionKey),
+            MODEL, s(rangeKey1)
+        );
+
+        TransactWriteItem updateColorToRedOnlyIfColorIsAlreadyBlue = TransactWriteItem.builder().update(
+            Update.builder()
+                .conditionExpression(COLOR + " = :color")
+                .expressionAttributeValues(
+                    Map.of(
+                        ":color", s("Blue"),
+                        ":newcolor", s("Red")
+                    )
+                )
+                .tableName(currentTableName)
+                .key(
+                    rangeKey1Map
+                )
+                .updateExpression("SET " + COLOR + " = :newcolor")
+                .build()
+        ).build();
+
+        TransactWriteItemsRequest updateColorOfItem1ToRedTransaction = TransactWriteItemsRequest.builder()
+            .transactItems(
+                updateColorToRedOnlyIfColorIsAlreadyBlue
+            )
+            .build();
+
+        dynamoDbAsyncClient.transactWriteItems(updateColorOfItem1ToRedTransaction).get();
+
+        CompletableFuture<GetItemResponse> getRangeKey1Future = dynamoDbAsyncClient.getItem(
+            GetItemRequest.builder().key(rangeKey1Map).tableName(currentTableName).build()
+        );
+
+        StepVerifier.create(Mono.fromFuture(getRangeKey1Future))
+                .expectNextMatches(getItemResponse -> getItemResponse.item().get(COLOR).s().equals("Red"))
+                .verifyComplete();
+
+        Map<String, AttributeValue> rangeKey2Map = Map.of(
+            COMPANY, s(partitionKey),
+            MODEL, s(rangeKey2)
+        );
+
+        TransactWriteItem updateRangeKey2ColorToOrange = TransactWriteItem.builder().update(
+            Update.builder()
+                .expressionAttributeValues(
+                    Map.of(
+                        ":newcolor", s("Orange")
+                    )
+                )
+                .tableName(currentTableName)
+                .key(
+                    rangeKey1Map
+                )
+                .updateExpression("SET " + COLOR + " = :newcolor")
+                .build()
+        ).build();
+
+        TransactWriteItemsRequest multiObjectTransactionThatShouldFailEverything = TransactWriteItemsRequest.builder()
+            .transactItems(
+                updateColorToRedOnlyIfColorIsAlreadyBlue,
+                updateRangeKey2ColorToOrange
+            )
+            .build();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.transactWriteItems(multiObjectTransactionThatShouldFailEverything)))
+                .expectErrorMatches(throwable -> {
+                    List<CancellationReason> cancellationReasons =
+                            ((TransactionCanceledException) throwable).cancellationReasons();
+                    return cancellationReasons.get(0).code().equals("ConditionalCheckFailed");
+                })
+                .verify();
+
+        CompletableFuture<GetItemResponse> getRangeKey2Future = dynamoDbAsyncClient.getItem(
+            GetItemRequest.builder().key(rangeKey2Map).tableName(currentTableName).build()
+        );
+
+        // one operation (Blue -> Red) failed because of a condition check, therefore ALL operations fail
+        StepVerifier.create(Mono.fromFuture(getRangeKey2Future))
+            .expectNextMatches(getItemResponse ->
+                !getItemResponse.item().get(COLOR).s().equals("Orange")
+                    && getItemResponse.item().get(COLOR).s().equals("Silver")
+            )
+            .verifyComplete();
+    }
+
+    private AttributeValue s(String value) {
+        return AttributeValue.builder().s(value).build();
     }
 
     private void putItem(String tableName, Map<String, AttributeValue> attributes) {
