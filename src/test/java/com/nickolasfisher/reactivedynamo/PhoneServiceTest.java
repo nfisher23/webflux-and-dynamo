@@ -764,7 +764,7 @@ public class PhoneServiceTest {
     }
 
     @Test
-     public void transactions() throws Exception {
+    public void transactions() throws Exception {
         String currentTableName = "TransactionsTest";
         createTableAndWaitForComplete(currentTableName);
 
@@ -867,6 +867,59 @@ public class PhoneServiceTest {
                     && getItemResponse.item().get(COLOR).s().equals("Silver")
             )
             .verifyComplete();
+    }
+
+    @Test
+    public void atomicCounting() throws Exception {
+        String currentTableName = "PhonesAtomicCounting";
+
+        createTableAndWaitForComplete(currentTableName);
+
+        String stubCompanyName = "Nokia";
+        String stubPhoneName = "flip-phone-1";
+
+        Map<String, AttributeValue> itemAttributes = getMapWith(stubCompanyName, stubPhoneName);
+        itemAttributes.put("Color", AttributeValue.builder().s("Orange").build());
+        itemAttributes.put("Version", AttributeValue.builder().n(Long.valueOf(1L).toString()).build());
+        itemAttributes.put("NumberSold", AttributeValue.builder().n(Long.valueOf(1L).toString()).build());
+
+        PutItemRequest populateDataItemRequest = PutItemRequest.builder()
+                .tableName(currentTableName)
+                .item(itemAttributes)
+                .build();
+
+        // populate initial data
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.putItem(populateDataItemRequest)))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        UpdateItemRequest updateItemRequest = UpdateItemRequest.builder()
+                .tableName(currentTableName)
+                .key(getMapWith(stubCompanyName, stubPhoneName))
+                .updateExpression("SET Version = Version + :incr_amt, NumberSold = NumberSold + :num_sold_incr_amt")
+                .expressionAttributeValues(Map.of(
+                        ":incr_amt",
+                        AttributeValue.builder().n("1").build(),
+                        ":num_sold_incr_amt",
+                        AttributeValue.builder().n("2").build()
+                    )
+                )
+                .build();
+
+        StepVerifier.create(Mono.fromFuture(() -> dynamoDbAsyncClient.updateItem(updateItemRequest)))
+                .expectNextMatches(updateItemResponse -> {
+                    return true;
+                }).verifyComplete();
+
+        StepVerifier.create(Mono.fromFuture(dynamoDbAsyncClient.getItem(
+                GetItemRequest.builder()
+                        .tableName(currentTableName)
+                        .key(getMapWith(stubCompanyName, stubPhoneName))
+                        .build())
+            ))
+            .expectNextMatches(getItemResponse -> getItemResponse.item().get("NumberSold").n().equals("3"))
+            .verifyComplete();
+
     }
 
     private AttributeValue s(String value) {
