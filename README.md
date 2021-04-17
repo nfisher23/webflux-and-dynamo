@@ -16,3 +16,5 @@ Can be found here:
 - [Scanning a DynamoDB table in Java with the AWS SDK 2.0](https://nickolasfisher.com/blog/Scanning-a-DynamoDB-table-in-Java-with-the-AWS-SDK-20)
 - [DynamoDB Transactions and Java](https://nickolasfisher.com/blog/DynamoDB-Transactions-and-Java)
 - [Atomic Incrementing in DynamoDB with the Java AWS SDK 2.0](https://nickolasfisher.com/blog/Atomic-Incrementing-in-DynamoDB-with-the-Java-AWS-SDK-20)
+- [Setup and Use a DynamoDB Test Container with the AWS Java SDK 2.0](https://nickolasfisher.com/blog/Setup-and-Use-a-DynamoDB-Test-Container-with-the-AWS-Java-SDK-20)
+
